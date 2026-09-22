@@ -1,0 +1,8 @@
+[package]
+name = "ovrvw"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+escpos = "0.20.0"
+jiff = "0.2.37"
