@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-escpos = "0.20.0"
+escpos = { version = "0.20.0", features = ["usb"] }
 jiff = "0.2.37"
+itertools = "0.15.0"
+regex = "1.13.1"
