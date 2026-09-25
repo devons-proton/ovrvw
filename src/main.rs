@@ -5,22 +5,15 @@ use escpos::{driver::*, errors::Result};
 use jiff::{Unit, Zoned};
 use itertools::Itertools;
 use regex::Regex;
+use codepage_437::{BorrowFromCp437, ToCp437, CP437_CONTROL};
 
 static LINE_WIDTH: usize = 40;
-static LIGHT_HORIZONTAL: &str = "─";
-static LIGHT_VERTICAL: &str = "│";
-static TITLE: &str = "OVERVW";
+static CONTENT_WIDTH: usize = 38;
 
 //static USB_DEVICE: struct usb_device {
 //    vendor_id: str = "0x000",
 //
 //}
-
-static NORMAL_TEXT_WIDTH: usize = 2;
-static NORMAL_TEXT_HEIGHT: usize = 3;
-
-static TITLE_TEXT_WIDTH: usize = 4;
-static TITLE_TEXT_HEIGHT: usize = 5;
 
 fn main() -> Result<()> {
     // env_logger::init();
@@ -49,7 +42,8 @@ fn main() -> Result<()> {
     //    .size(1, 1)?
     //    .writeln("Hello world - Normal─")?;
 
-    print_header(&mut printer);
+    let content: Vec<&str> = vec!["OVERVW", " ", "ehruwheruhewurewhoiewroiewhfhdsfhdsjfkdsjflkdsjfkdjkdjlkjdlkfskdljflkdsfdfds"];
+    print_box(&mut printer, "TITLE", content);
     print_end(&mut printer);
 
     Ok(())
@@ -103,72 +97,52 @@ fn print_line(p: &mut Printer<UsbDriver>, string: &str) {
     }
 }
 
-fn print_in_box(p: &mut Printer<UsbDriver>, content: Vec<&str>, bold: bool, double: bool) -> Result<()> {
-    let mut box_char = ["┌","┐","└","┘","─","│"];
-    if double {
-        box_char = ["╔","╗","╚","╝","═","║"]
-    }
+fn print_box(p: &mut Printer<UsbDriver>, heading: &str, content: Vec<&str>){
+    static BORDER_CHAR_HEX: [u8; 6] = [0xDA, 0xBF, 0xC0, 0xD9, 0xB3, 0xC4]; // TL, TR, BL, BR, V, H
 
-    let header_bar = &format!(
-        "{}{}{}",
-        box_char[0],
-        box_char[4].repeat(LINE_WIDTH),
-        box_char[1]
-    );
-    p.writeln(&header_bar)?;
+    println!("{}", heading);
+    let mut upbar: Vec<u8> = vec![BORDER_CHAR_HEX[0]];
+    upbar.extend(std::iter::repeat(BORDER_CHAR_HEX[5]).take(CONTENT_WIDTH));
+    upbar.push(BORDER_CHAR_HEX[1]);
+    p.custom(upbar.as_slice().try_into().unwrap());
+    print_to_terminal(&upbar);
 
-    for x in content { // For every line in content
-        if x.len() > LINE_WIDTH-2 { // Check if string would cause overflow. If so, split into chunks and print each chunk.
-            let i = x.chars()
-                .chunks(LINE_WIDTH)
-                .into_iter()
-                .map(|chunk| chunk.collect::<String>())
-                .collect::<Vec<String>>();
-            for j in i {
-                print_line(p, &format!("{}{:<width$}{}", box_char[5], j, box_char[5], width = LINE_WIDTH))
+    for i in content {
+        let content_split: Vec<String> = i.chars().chunks(CONTENT_WIDTH).into_iter().map(|c| c.collect::<String>()).collect();
+
+        for j in content_split {
+            if j.len() > LINE_WIDTH {
+                let content_bytes = j.to_cp437(&CP437_CONTROL).unwrap().into_owned();
+                let mut mid_line: Vec<u8> = vec![BORDER_CHAR_HEX[4]];
+                mid_line.extend(&content_bytes);
+                mid_line.push(BORDER_CHAR_HEX[4]);
+                print_to_terminal(&mid_line);
+                p.custom(mid_line.as_slice().try_into().unwrap());
+
+            } else {
+                let content_bytes = j.to_cp437(&CP437_CONTROL).unwrap().into_owned();
+                let mut mid_line: Vec<u8> = vec![BORDER_CHAR_HEX[4]];
+                mid_line.extend(&content_bytes);
+                mid_line.extend(std::iter::repeat(b' ').take(CONTENT_WIDTH - (j.len())));
+                mid_line.push(BORDER_CHAR_HEX[4]);
+                p.custom(mid_line.as_slice().try_into().unwrap());
+                print_to_terminal(&mid_line);
             }
-        } else {
-            print_line(p, &format!("{}{:<width$}{}", box_char[5], x, box_char[5], width = LINE_WIDTH))
         }
     }
 
-    let footer_bar = &format!(
-        "{}{}{}",
-        box_char[2],
-        box_char[4].repeat(LINE_WIDTH),
-        box_char[3]
-    );
-    p.writeln(&footer_bar)?;
+    let mut downbar: Vec<u8> = vec![BORDER_CHAR_HEX[2]];
+    downbar.extend(std::iter::repeat(BORDER_CHAR_HEX[5]).take(CONTENT_WIDTH));
+    downbar.push(BORDER_CHAR_HEX[3]);
+    p.custom(downbar.as_slice().try_into().unwrap());
+    print_to_terminal(&downbar);
 
-    Ok(())
 
+}
+fn print_to_terminal(vector: &Vec<u8>) { // For debugging
+    println!("{}", String::borrow_from_cp437(&vector, &CP437_CONTROL));
 }
 fn print_end(p: &mut Printer<UsbDriver>) -> Result<()> {
     p.print_cut()?; // print() or print_cut() is mandatory to send the data to the printer
-    Ok(())
-}
-
-fn print_header(p: &mut Printer<UsbDriver>) -> Result<()> {
-    p.size(1, 2)?;
-    let mut content = vec!["#4OVERVW"];
-    let rfc_date = &jiff::fmt::rfc2822::to_string(&Zoned::now()).expect("Date Formatting Error");
-    content.extend(["", rfc_date, "", "hsdojfghDJIGFHSDIJGHASDFJKGHJKDFAHGJKDAHGKDHGJDSHGJKDFSHGJKLHSKJGAEHKJHAJIHAJHGAEHJHOHOFHHFJOAHSDFGJKHADFJKGHSAJOfghadkjghadjkhgjksdhgjksdhgjka;dhgjkHDGJK;SDHFGJKSHGjHDJKSGHA;KJ"]);
-    print_in_box(p,content.clone(), false, false)?;
-    print_in_box(p,content.clone(), false, false)?;
-
-    // Construct center Title
-    //p.size(1, 2)?;
-    //let title = &format!("{:>width$}", title, width = LINE_WIDTH/4);
-    //p.write(LIGHT_VERTICAL);
-
-    //p.bold(true)?;
-    //print_scaled_str(p, title, 4, 1, 1, 2)?;
-    //p.bold(false)?;
-
-    //let mut header_bar = String::from("┌");
-    //header_bar.push_str(&LIGHT_HORIZONTAL.repeat(LINE_WIDTH));
-    //header_bar.push_str("┐");
-    //p.writeln(&header_bar)?;
-
     Ok(())
 }
