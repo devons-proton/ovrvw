@@ -1,0 +1,1 @@
+A small program for creating useful 'reports' using a thermal printer.
